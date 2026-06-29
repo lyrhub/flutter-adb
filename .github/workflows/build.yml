@@ -3,6 +3,7 @@ name: Build Flutter APK
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
     branches: [master]
 
@@ -36,3 +37,10 @@ jobs:
         with:
           name: flutter-adb-release
           path: build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/app/outputs/flutter-apk/app-release.apk
+          generate_release_notes: true
