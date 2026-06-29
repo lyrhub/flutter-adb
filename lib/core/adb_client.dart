@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 
 class AppInfo {
@@ -110,7 +111,7 @@ class AdbClient extends ChangeNotifier {
     
     final header = await _socket!.first.timeout(
       const Duration(seconds: 10),
-      onTimeout: () => [],
+      onTimeout: () => Uint8List(0),
     );
     
     if (header.isEmpty) return '';
