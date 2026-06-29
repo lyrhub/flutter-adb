@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 import '../core/adb_client.dart';
 
 class AppsPage extends StatefulWidget {
@@ -117,6 +119,86 @@ class _AppsPageState extends State<AppsPage> {
     }
   }
 
+  Future<void> _installApk() async {
+    final adbClient = context.read<AdbClient>();
+    if (!adbClient.isConnected) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先连接设备')),
+      );
+      return;
+    }
+
+    // 选择APK文件
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['apk'],
+    );
+
+    if (result == null || result.files.isEmpty) return;
+
+    final filePath = result.files.single.path;
+    if (filePath == null) return;
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('正在上传并安装APK...')),
+      );
+    }
+
+    try {
+      // 读取文件
+      final file = File(filePath);
+      final data = await file.readAsBytes();
+
+      const remotePath = '/data/local/tmp/install.apk';
+
+      // 推送到设备
+      final pushSuccess = await adbClient.pushFileData(data, remotePath);
+      if (!pushSuccess) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('文件上传失败')),
+          );
+        }
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // 安装
+      final installResult = await adbClient.installApk(remotePath);
+
+      // 清理临时文件
+      await adbClient.executeCommand('rm $remotePath');
+
+      final success = installResult.toLowerCase().contains('success');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(success ? '安装成功' : '安装结果: $installResult')),
+        );
+      }
+
+      // 刷新应用列表
+      _loadApps();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('安装失败: $e')),
+        );
+      }
+    }
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
   void _showAppMenu(AppInfo app) {
     showModalBottomSheet(
       context: context,
@@ -174,6 +256,11 @@ class _AppsPageState extends State<AppsPage> {
       appBar: AppBar(
         title: const Text('应用管理'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.install_mobile),
+            onPressed: _installApk,
+            tooltip: '安装APK',
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadApps,

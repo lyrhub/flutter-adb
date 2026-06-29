@@ -191,6 +191,39 @@ class AdbClient extends ChangeNotifier {
     return result.contains('Success') || result.contains('success');
   }
 
+  /// 推送文件数据到设备（通过 base64 分片写入）
+  Future<bool> pushFileData(List<int> data, String remotePath) async {
+    if (!_isConnected) return false;
+
+    try {
+      const chunkSize = 3072; // 每片原始字节数
+      var offset = 0;
+      var first = true;
+
+      while (offset < data.length) {
+        final end = offset + chunkSize > data.length ? data.length : offset + chunkSize;
+        final chunk = data.sublist(offset, end);
+        final b64 = base64Encode(chunk);
+
+        final op = first ? '>' : '>>';
+        final cmd = "echo '$b64' | base64 -d $op $remotePath";
+        await executeCommand(cmd);
+
+        first = false;
+        offset = end;
+      }
+      return true;
+    } catch (e) {
+      debugPrint('推送文件失败: $e');
+      return false;
+    }
+  }
+
+  /// 安装APK文件（需要先推送到设备）
+  Future<String> installApk(String remotePath) async {
+    return await executeCommand('pm install -r $remotePath');
+  }
+
   // 文件管理
   Future<List<FileItem>> listFiles(String path) async {
     final result = await executeCommand('ls -la $path');
